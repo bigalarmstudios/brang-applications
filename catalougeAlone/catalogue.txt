@@ -1,0 +1,4 @@
+calculator
+firefox
+text editor
+image viewer
