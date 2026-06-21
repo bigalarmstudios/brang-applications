@@ -3,5 +3,4 @@ text editor
 image viewer
 paint
 music player
-settings
 clock
