@@ -4,3 +4,4 @@ image viewer
 paint
 music player
 clock
+file explorer
