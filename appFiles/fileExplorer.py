@@ -75,7 +75,7 @@ def update(events):
             # 2. Check file/folder list clicks
             else:
                 clicked_something = False
-                for rect, item_name in file_rects.items():
+                for rect, item_name in list(file_rects.items()):
                     if rect.collidepoint(mx, my):
                         clicked_something = True
                         full_item_path = os.path.join(current_path, item_name)
@@ -128,18 +128,21 @@ def handle_delete():
         show_alert("Selection Required", "Please select an item to delete!")
         return
     target = os.path.join(current_path, selected_item)
-    if os.path.isdir(target):
-        shutil.rmtree(target)
-    else:
-        os.remove(target)
-    selected_item = None
+    try:
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        else:
+            os.remove(target)
+        selected_item = None
+    except Exception as e:
+        show_alert("Error", f"Could not delete item: {e}")
 
 def handle_move():
     global current_path, selected_item
     if not selected_item:
         show_alert("Selection Required", "Please select an item to move!")
         return
-    dest_folder = prompt_user_input("Move Item", "Enter destination folder relative to Root (e.g. Documents):")
+    dest_folder = prompt_user_input("Move Item", "Enter destination folder relative to Root (e.g. downloads):")
     if dest_folder is not None:
         # Build clean target paths safely inside root ecosystem
         if dest_folder.strip() in ["", "Root", "root"]:
@@ -211,9 +214,12 @@ def render(screen):
     pygame.draw.rect(screen, (255, 255, 255), list_area)
     pygame.draw.rect(screen, PANEL_BORDER, list_area, 2)
     
-    # Fetch content items inside current running directory
+    # Clean, foolproof folder-first sorting (case-insensitive)
     try:
-        items = sorted(os.listdir(current_path), key=lambda x: not os.path.isdir(os.path.join(current_path, x)))
+        raw_items = os.listdir(current_path)
+        folders = sorted([i for i in raw_items if os.path.isdir(os.path.join(current_path, i))], key=lambda s: s.lower())
+        files = sorted([i for i in raw_items if not os.path.isdir(os.path.join(current_path, i))], key=lambda s: s.lower())
+        items = folders + files
     except Exception:
         items = []
         
