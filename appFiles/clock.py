@@ -2,10 +2,33 @@ import pygame
 import datetime
 import calendar
 
+# Keep trackers to ensure we only load system assets exactly once
+FONTS_INITIALIZED = False
+font_large_time = None
+font_sec = None
+font_sub = None
+font_cal = None
+font_cal_header = None
+
+def init_fonts():
+    """Safely loads fonts into memory only once when the app runs."""
+    global FONTS_INITIALIZED, font_large_time, font_sec, font_sub, font_cal, font_cal_header
+    if not FONTS_INITIALIZED:
+        pygame.font.init()
+        font_large_time = pygame.font.SysFont('Arial', 110, bold=True)
+        font_sec        = pygame.font.SysFont('Arial', 45, bold=True)
+        font_sub        = pygame.font.SysFont('Arial', 28, bold=True)
+        font_cal        = pygame.font.SysFont('Arial', 22, bold=True)
+        font_cal_header = pygame.font.SysFont('Arial', 18, bold=True)
+        FONTS_INITIALIZED = True
+
 def update(events):
     pass
 
 def render(screen):
+    # Safely load fonts on the first active render frame
+    init_fonts()
+
     # ── 1. CORE DSi PALETTE ───────────────────────────────────────────
     BG_WHITE      = (245, 247, 250)
     DS_GRAY       = (215, 220, 225)
@@ -36,13 +59,6 @@ def render(screen):
     sec_str = now.strftime("%S")             
     ampm_str = now.strftime("%p")            
     date_str = now.strftime("%B %d, %Y (%a)") 
-
-    # Fonts
-    font_large_time = pygame.font.SysFont('Arial', 110, bold=True)
-    font_sec        = pygame.font.SysFont('Arial', 45, bold=True)
-    font_sub        = pygame.font.SysFont('Arial', 28, bold=True)
-    font_cal        = pygame.font.SysFont('Arial', 22, bold=True)
-    font_cal_header = pygame.font.SysFont('Arial', 18, bold=True)
 
     # ── 3. LEFT PANEL: DIGITAL READOUT ─────────────────────────────────
     time_surf = font_large_time.render(time_str, True, DARK_TEXT)
