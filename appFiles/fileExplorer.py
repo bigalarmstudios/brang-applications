@@ -15,9 +15,9 @@ def init_fonts():
         ui_font = pygame.font.SysFont('Arial', 18, bold=True)
         file_font = pygame.font.SysFont('Arial', 16)
 
-# ── FILE SYSTEM PATH SETUP ───────────────────────────────────────────
-# Base directory calculated dynamically from where the core scripts sit
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ── CRASH FIX: LOOK AT THE REAL DISK PATH ─────────────────────────────
+# This gets the true directory path of brangdesktop.py on your PC
+BASE_DIR = os.getcwd()
 FILES_ROOT = os.path.join(BASE_DIR, "files")
 
 # Ensure the core "files" folder exists on launch
@@ -101,11 +101,14 @@ def handle_create():
     name = prompt_user_input("Create Item", "Enter name (end with extension for files, e.g. notes.txt):")
     if name:
         target = os.path.join(current_path, name)
-        if "." in name: # Treat as file
-            with open(target, "w") as f:
-                f.write("")
-        else: # Treat as directory folder
-            os.makedirs(target, exist_ok=True)
+        try:
+            if "." in name: # Treat as file
+                with open(target, "w") as f:
+                    f.write("")
+            else: # Treat as directory folder
+                os.makedirs(target, exist_ok=True)
+        except Exception as e:
+            show_alert("Error", f"Could not create item: {e}")
 
 def handle_rename():
     global current_path, selected_item
@@ -117,8 +120,11 @@ def handle_rename():
         src = os.path.join(current_path, selected_item)
         dst = os.path.join(current_path, new_name)
         if not os.path.exists(dst):
-            os.rename(src, dst)
-            selected_item = None
+            try:
+                os.rename(src, dst)
+                selected_item = None
+            except Exception as e:
+                show_alert("Error", f"Rename failed: {e}")
         else:
             show_alert("Error", "An item with that name already exists.")
 
@@ -144,7 +150,6 @@ def handle_move():
         return
     dest_folder = prompt_user_input("Move Item", "Enter destination folder relative to Root (e.g. downloads):")
     if dest_folder is not None:
-        # Build clean target paths safely inside root ecosystem
         if dest_folder.strip() in ["", "Root", "root"]:
             target_dir = FILES_ROOT
         else:
@@ -173,7 +178,6 @@ def render(screen):
     global file_rects, selected_item
     init_fonts()
     
-    # Core DSi-styled layout frames 
     WINDOW_BG     = (240, 244, 248)
     PANEL_BORDER  = (180, 190, 200)
     TEXT_DARK     = (40, 45, 55)
@@ -182,18 +186,15 @@ def render(screen):
     FOLDER_COLOR  = (240, 190, 70)
     FILE_COLOR    = (70, 160, 240)
     
-    # 1. Main window frame canvas positioning bounding box
     app_rect = pygame.Rect(460, 240, 1000, 600)
     pygame.draw.rect(screen, WINDOW_BG, app_rect)
     pygame.draw.rect(screen, PANEL_BORDER, app_rect, 5)
     
-    # 2. Draw Navigation Top Bar Info Area
     pygame.draw.rect(screen, (255, 255, 255), (480, 255, 960, 40))
     pygame.draw.rect(screen, PANEL_BORDER, (480, 255, 960, 40), 2)
     path_lbl = ui_font.render(f" Location: {get_relative_path()}", True, TEXT_DARK)
     screen.blit(path_lbl, (490, 263))
     
-    # 3. Render Dashboard Top Action Functional Bar Layout
     buttons = [
         ("Create", 480, 305),
         ("Rename", 580, 305),
@@ -209,12 +210,10 @@ def render(screen):
         btn_txt = ui_font.render(text, True, TEXT_DARK)
         screen.blit(btn_txt, (bx + (45 - btn_txt.get_width() // 2), by + 7))
 
-    # 4. Viewport Window File Listing Grid Calculations
     list_area = pygame.Rect(480, 360, 960, 440)
     pygame.draw.rect(screen, (255, 255, 255), list_area)
     pygame.draw.rect(screen, PANEL_BORDER, list_area, 2)
     
-    # Clean, foolproof folder-first sorting (case-insensitive)
     try:
         raw_items = os.listdir(current_path)
         folders = sorted([i for i in raw_items if os.path.isdir(os.path.join(current_path, i))], key=lambda s: s.lower())
@@ -236,29 +235,24 @@ def render(screen):
         item_x = start_x + (col * column_width)
         item_y = start_y + (row * row_height)
         
-        # Don't draw past bounded container bottom view limits
         if item_y + 40 > 800:
             continue
             
         full_path = os.path.join(current_path, item)
         is_dir = os.path.isdir(full_path)
         
-        # Define clickable hitbox tracking rect row node item
         item_rect = pygame.Rect(item_x, item_y, 210, 40)
         file_rects[item_rect] = item
         
-        # Highlight background row frame conditional selector state
         if selected_item == item:
             pygame.draw.rect(screen, BTN_HOVER, item_rect)
         else:
             pygame.draw.rect(screen, (245, 248, 252), item_rect)
         pygame.draw.rect(screen, PANEL_BORDER, item_rect, 1)
         
-        # Dynamic Icon Marker Box indicator setup
         icon_color = FOLDER_COLOR if is_dir else FILE_COLOR
         pygame.draw.rect(screen, icon_color, (item_x + 8, item_y + 10, 20, 20))
         
-        # Format text bounds smoothly to fit container column metrics safely
         display_name = item if len(item) <= 16 else item[:14] + ".."
         name_surf = file_font.render(display_name, True, TEXT_DARK)
         screen.blit(name_surf, (item_x + 36, item_y + 11))
