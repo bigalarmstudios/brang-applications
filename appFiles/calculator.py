@@ -7,6 +7,18 @@ result = ""
 last_ans = "0"
 advanced_mode = False
 
+# ── SAFELY INITIALIZE FONTS ONCE ──────────────────────────────────────
+sys_font = None
+display_font = None
+btn_font = None
+
+def init_fonts():
+    global sys_font, display_font, btn_font
+    if sys_font is None:
+        sys_font = pygame.font.SysFont('Arial', 22)
+        display_font = pygame.font.SysFont('Courier New', 26, bold=True)
+        btn_font = pygame.font.SysFont('Arial', 24, bold=True)
+
 def get_buttons(app_x, app_y):
     """Dynamically calculates the layouts and hitboxes for buttons based on the mode."""
     btns = []
@@ -107,16 +119,14 @@ def update(events):
 
 def render(screen):
     """Draws the Windows-style blocky calculator layout onto the core window."""
+    # Run the font optimization check
+    init_fonts()
+
     # Compute center dimensions based on the current active UI panel configuration
     app_width = 560 if advanced_mode else 380
     app_height = 620
     app_x = 960 - app_width // 2
     app_y = 180
-    
-    # Initialize fonts
-    sys_font = pygame.font.SysFont('Arial', 22)
-    display_font = pygame.font.SysFont('Courier New', 26, bold=True)
-    btn_font = pygame.font.SysFont('Arial', 24, bold=True)
     
     # ── 1. DRAW WINDOW CONTAINER FRAME ──────────────────────────────────
     app_rect = pygame.Rect(app_x, app_y, app_width, app_height)
