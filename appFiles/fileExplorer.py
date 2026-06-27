@@ -15,8 +15,7 @@ def init_fonts():
         ui_font = pygame.font.SysFont('Arial', 18, bold=True)
         file_font = pygame.font.SysFont('Arial', 16)
 
-# ── CRASH FIX: LOOK AT THE REAL DISK PATH ─────────────────────────────
-# This gets the true directory path of brangdesktop.py on your PC
+# ── LOOK AT THE REAL DISK PATH ────────────────────────────────────────
 BASE_DIR = os.getcwd()
 FILES_ROOT = os.path.join(BASE_DIR, "files")
 
@@ -27,9 +26,9 @@ if not os.path.exists(FILES_ROOT):
 # Track current active path inside the explorer
 current_path = FILES_ROOT
 
-# UI Scroll/List offsets
+# UI Selection & Hitbox mapping trackers
 selected_item = None
-file_rects = {}  # Maps Pygame Rects -> File/Folder names
+file_rects = {}  # FIX: Maps Folder/File Name (String) -> Pygame Rect Hitbox
 
 def get_relative_path():
     """Returns a clean display path relative to the files root."""
@@ -75,7 +74,8 @@ def update(events):
             # 2. Check file/folder list clicks
             else:
                 clicked_something = False
-                for rect, item_name in list(file_rects.items()):
+                # FIX: Safely iterate through name -> hitbox mapping
+                for item_name, rect in list(file_rects.items()):
                     if rect.collidepoint(mx, my):
                         clicked_something = True
                         full_item_path = os.path.join(current_path, item_name)
@@ -242,7 +242,8 @@ def render(screen):
         is_dir = os.path.isdir(full_path)
         
         item_rect = pygame.Rect(item_x, item_y, 210, 40)
-        file_rects[item_rect] = item
+        # FIX: Key is now the item's string name, value is the Rect hitbox
+        file_rects[item] = item_rect
         
         if selected_item == item:
             pygame.draw.rect(screen, BTN_HOVER, item_rect)
