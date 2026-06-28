@@ -1,3 +1,4 @@
+__version__ = 2.1
 import pygame
 import os
 import shutil

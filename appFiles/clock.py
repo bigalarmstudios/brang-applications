@@ -1,3 +1,4 @@
+__version__ = 1.5
 import pygame
 import datetime
 import calendar

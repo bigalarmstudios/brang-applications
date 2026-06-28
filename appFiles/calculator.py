@@ -1,3 +1,4 @@
+__version__ = 1.1
 import pygame
 import math
 
