@@ -1,4 +1,4 @@
-__version__ = "2.2"
+__version__ = "2.3"
 import pygame
 import os
 import shutil
@@ -25,13 +25,13 @@ current_path = FILES_ROOT
 selected_item = None
 file_rects = {}
 
-# Double Click Detection State Metrics
 last_clicked_item = None
 last_click_time = 0
+is_save_as_intercept = False
 
 def get_relative_path():
     rel = os.path.relpath(current_path, FILES_ROOT)
-    return "Root" if rel == "." else f"Root/{rel}健全".replace("\\", "/")
+    return "Root" if rel == "." else f"Root/{rel}".replace("\\", "/")
 
 def prompt_user_input(title, prompt_text):
     root = tk.Tk()
@@ -41,9 +41,46 @@ def prompt_user_input(title, prompt_text):
     root.destroy()
     return result
 
-# ── NEW INTEGRATED TRIGGER FUNCTION ──────────────────────────────────
+# ── NEW: SAVE AS INTERCEPT LOAD HANDLER ──
+def load_file(mode_argument):
+    """Triggered by the OS if textEditor forwards an unsaved document buffer."""
+    global is_save_as_intercept
+    if mode_argument == "SAVE_AS_MODE":
+        is_save_as_intercept = True
+
+def process_save_as_handover():
+    global is_save_as_intercept
+    is_save_as_intercept = False
+    
+    name = prompt_user_input("Save Unsaved Document", "Enter filename to create (e.g., draft.txt):")
+    if not name:
+        return
+    if not name.endswith(".txt"):
+        name += ".txt"
+        
+    full_new_path = os.path.join(current_path, name.strip())
+    cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+    buffer_path = os.path.join(cache_dir, "editor_buffer_cache.txt")
+    
+    # Extract cache data
+    saved_content = ""
+    if os.path.exists(buffer_path):
+        with open(buffer_path, "r", encoding="utf-8") as f:
+            saved_content = f.read()
+        os.remove(buffer_path)
+        
+    # Write file out safely to disk
+    with open(full_new_path, "w", encoding="utf-8") as f:
+        f.write(saved_content)
+        
+    # Bounce execution immediately back to textEditor with new path variable 
+    handover_path = os.path.join(cache_dir, "app_handover.txt")
+    with open(handover_path, "w", encoding="utf-8") as f:
+        f.write(f"textEditor|{full_new_path}")
+        
+    pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_editor"}))
+
 def check_text_editor_launch(full_file_path):
-    """Spawns confirmation dialog asking if user wants to switch to the textEditor app."""
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
@@ -51,14 +88,10 @@ def check_text_editor_launch(full_file_path):
     root.destroy()
     
     if ans:
-        # We write out a clean contextual signal handover configuration file
-        # telling BrangDesktop to close this app and load textEditor next execution frame.
         handover_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache", "app_handover.txt")
         os.makedirs(os.path.dirname(handover_path), exist_ok=True)
         with open(handover_path, "w", encoding="utf-8") as f:
             f.write(f"textEditor|{full_file_path}")
-            
-        # Signal to fileExplorer internal update cycle loop to gracefully terminate execution environment
         return True
     return False
 
@@ -66,9 +99,13 @@ def update(events):
     global current_path, selected_item, file_rects, last_clicked_item, last_click_time
     init_fonts()
     
+    # If the app booted into save intercept mode, run dialog prompt instantly!
+    if is_save_as_intercept:
+        process_save_as_handover()
+        return
+        
     mouse_pos = pygame.mouse.get_pos()
     
-    # Static Static Layout Positions
     new_folder_rect = pygame.Rect(230, 310, 130, 35)
     new_file_rect   = pygame.Rect(375, 310, 110, 35)
     delete_rect     = pygame.Rect(500, 310, 90, 35)
@@ -76,14 +113,12 @@ def update(events):
     
     for event in events:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            # Action: Navigation Backwards Trace
             if back_btn_rect.collidepoint(mouse_pos):
                 if current_path != FILES_ROOT:
                     current_path = os.path.dirname(current_path)
                     selected_item = None
                 continue
                 
-            # Action: Create Folder Structure
             if new_folder_rect.collidepoint(mouse_pos):
                 name = prompt_user_input("New Folder", "Enter folder name:")
                 if name:
@@ -92,7 +127,6 @@ def update(events):
                         os.makedirs(target)
                 continue
                 
-            # Action: Create Text Document
             if new_file_rect.collidepoint(mouse_pos):
                 name = prompt_user_input("New File", "Enter file name (e.g. note.txt):")
                 if name:
@@ -104,7 +138,6 @@ def update(events):
                             f.write("")
                 continue
                 
-            # Action: Target Deletion Utility
             if delete_rect.collidepoint(mouse_pos) and selected_item:
                 target = os.path.join(current_path, selected_item)
                 root = tk.Tk()
@@ -120,26 +153,21 @@ def update(events):
                     selected_item = None
                 continue
                 
-            # Action Area Hit Detection Loop Scan
             clicked_something = False
             for item, rect in file_rects.items():
                 if rect.collidepoint(mouse_pos):
                     clicked_something = True
                     current_time = pygame.time.get_ticks()
                     
-                    # ── DOUBLE CLICK PROCESSING CHAIN DETECTION ──
                     if item == last_clicked_item and (current_time - last_click_time) < 400:
                         full_path = os.path.join(current_path, item)
                         if os.path.isdir(full_path):
                             current_path = full_path
                             selected_item = None
                         elif item.endswith(".txt"):
-                            # Ask to launch the new textEditor script environment
                             if check_text_editor_launch(full_path):
-                                # Trigger close condition event matching standard exit signatures
                                 pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_editor"}))
-                        
-                        last_clicked_item = None # Clear state trackers
+                        last_clicked_item = None
                         break
                     else:
                         selected_item = item
@@ -147,20 +175,15 @@ def update(events):
                         last_click_time = current_time
                     
             if not clicked_something:
-                # Check bounding zone to avoid accidental clear selections
                 list_area = pygame.Rect(490, 375, 1180, 560)
                 if list_area.collidepoint(mouse_pos):
                     selected_item = None
 
-        # Catch internal event intercept handovers
-        if event.type == pygame.USEREVENT and getattr(event, "action", "") == "exit_to_editor":
-            # Force close hook by generating fake escape code signatures
+        if event.type == pygame.USEREVENT and getattr(event, "action", "") in ["exit_to_editor", "exit_to_explorer"]:
             events.append(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE))
 
 def render(screen):
     init_fonts()
-    
-    # Palette definition properties
     PANEL_BG = (240, 244, 250)
     WHITE = (255, 255, 255)
     PANEL_BORDER = (200, 210, 230)
@@ -168,12 +191,10 @@ def render(screen):
     BTN_HOVER = (100, 160, 210)
     TEXT_DARK = (40, 45, 55)
     
-    # ── 1. DRAW INNER CONTAINER WINDOW ──────────────────────────────────
     work_area = pygame.Rect(210, 80, 1500, 900)
     pygame.draw.rect(screen, PANEL_BG, work_area)
     pygame.draw.rect(screen, PANEL_BORDER, work_area, 3)
     
-    # ── 2. HEADER PATH BAR DISPLAY CONTROL ─────────────────────────────
     header_rect = pygame.Rect(210, 80, 1500, 65)
     pygame.draw.rect(screen, WHITE, header_rect)
     pygame.draw.rect(screen, PANEL_BORDER, header_rect, 2)
@@ -182,17 +203,13 @@ def render(screen):
     path_lbl = ui_font.render(f"📁 Location: {path_str}", True, TEXT_DARK)
     screen.blit(path_lbl, (240, 100))
     
-    # ── 3. TOOLBAR ACTION CONTROL ZONE BUTTONS ───────────────────────
     mouse_pos = pygame.mouse.get_pos()
-    
-    # Back button rendering tracking logic
     back_rect = pygame.Rect(230, 165, 80, 35)
     is_root = (current_path == FILES_ROOT)
     b_color = (210, 215, 225) if is_root else (BTN_HOVER if back_rect.collidepoint(mouse_pos) else BTN_COLOR)
     pygame.draw.rect(screen, b_color, back_rect)
     screen.blit(ui_font.render("<- Up", True, WHITE), (back_rect.x + 15, back_rect.y + 6))
     
-    # Action Tooling parameters properties assignments configurations definitions 
     new_folder_rect = pygame.Rect(230, 310, 130, 35)
     new_file_rect   = pygame.Rect(375, 310, 110, 35)
     delete_rect     = pygame.Rect(500, 310, 90, 35)
@@ -200,11 +217,10 @@ def render(screen):
     for r, t in [(new_folder_rect, "+ Folder"), (new_file_rect, "+ Text File"), (delete_rect, "🗑 Delete")]:
         c = BTN_HOVER if r.collidepoint(mouse_pos) else BTN_COLOR
         if t == "🗑 Delete" and not selected_item:
-            c = (210, 215, 225) # Greyed dead state
+            c = (210, 215, 225)
         pygame.draw.rect(screen, c, r)
         screen.blit(ui_font.render(t, True, WHITE), (r.x + 12, r.y + 6))
 
-    # Sidebar utility area metadata descriptions panel text
     sidebar = pygame.Rect(230, 375, 240, 560)
     pygame.draw.rect(screen, WHITE, sidebar)
     pygame.draw.rect(screen, PANEL_BORDER, sidebar, 2)
@@ -221,7 +237,6 @@ def render(screen):
     screen.blit(hint_lbl3, (245, 500))
     screen.blit(hint_lbl4, (245, 525))
 
-    # ── 4. RENDER DYNAMIC DIRECTORY LIST GRID CONTENT ───────────────────
     list_area = pygame.Rect(490, 375, 1180, 560)
     pygame.draw.rect(screen, WHITE, list_area)
     pygame.draw.rect(screen, PANEL_BORDER, list_area, 2)
@@ -252,7 +267,7 @@ def render(screen):
             item_y = start_y + (row * row_height)
             
             if item_x + column_width > 1650:
-                continue # Overflow safeguard protection bounding barrier
+                continue
                 
             full_path = os.path.join(current_path, item)
             is_dir = os.path.isdir(full_path)
@@ -260,7 +275,6 @@ def render(screen):
             item_rect = pygame.Rect(item_x, item_y, 260, 40)
             file_rects[item] = item_rect
             
-            # Draw individual file line blocks containers
             if selected_item == item:
                 pygame.draw.rect(screen, (220, 235, 255), item_rect)
                 pygame.draw.rect(screen, (150, 190, 255), item_rect, 1)
@@ -268,7 +282,6 @@ def render(screen):
                 pygame.draw.rect(screen, (248, 250, 254), item_rect)
                 pygame.draw.rect(screen, PANEL_BORDER, item_rect, 1)
                 
-            # Prefix visual emojis matching structural classes
             prefix = "📁 " if is_dir else "📄 "
             display_text = prefix + item
             if len(display_text) > 24:
