@@ -1,4 +1,4 @@
-__version__ = "2.3"
+__version__ = "2.4"
 import pygame
 import os
 import shutil
@@ -29,6 +29,10 @@ last_clicked_item = None
 last_click_time = 0
 is_save_as_intercept = False
 
+# ── NEW STATE TRACKERS FOR FILE MOVING SYSTEM ──
+moving_source_path = None     # Absolute path of the item being moved
+move_worker_generator = None  # Tracks our active progressive generator job
+
 def get_relative_path():
     rel = os.path.relpath(current_path, FILES_ROOT)
     return "Root" if rel == "." else f"Root/{rel}".replace("\\", "/")
@@ -41,9 +45,7 @@ def prompt_user_input(title, prompt_text):
     root.destroy()
     return result
 
-# ── NEW: SAVE AS INTERCEPT LOAD HANDLER ──
 def load_file(mode_argument):
-    """Triggered by the OS if textEditor forwards an unsaved document buffer."""
     global is_save_as_intercept
     if mode_argument == "SAVE_AS_MODE":
         is_save_as_intercept = True
@@ -62,18 +64,15 @@ def process_save_as_handover():
     cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
     buffer_path = os.path.join(cache_dir, "editor_buffer_cache.txt")
     
-    # Extract cache data
     saved_content = ""
     if os.path.exists(buffer_path):
         with open(buffer_path, "r", encoding="utf-8") as f:
             saved_content = f.read()
         os.remove(buffer_path)
         
-    # Write file out safely to disk
     with open(full_new_path, "w", encoding="utf-8") as f:
         f.write(saved_content)
         
-    # Bounce execution immediately back to textEditor with new path variable 
     handover_path = os.path.join(cache_dir, "app_handover.txt")
     with open(handover_path, "w", encoding="utf-8") as f:
         f.write(f"textEditor|{full_new_path}")
@@ -95,11 +94,69 @@ def check_text_editor_launch(full_file_path):
         return True
     return False
 
+# ── NEW: NON-FREEZING ASYNCHRONOUS MOVE WORKER GENERATOR ──
+def create_move_worker(src, dst_dir):
+    """Yields control back periodically during operation to keep UI drawing."""
+    if not os.path.exists(src):
+        return
+    
+    basename = os.path.basename(src)
+    dst = os.path.join(dst_dir, basename)
+    
+    # 1. Failsafe checks
+    if src == dst_dir or dst_dir.startswith(src + os.sep):
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        messagebox.showerror("Movement Loop Error", "Cannot move a parent folder inside itself or its own subdirectories!")
+        root.destroy()
+        return
+
+    if os.path.exists(dst):
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        overwrite = messagebox.askyesno("Item Exists", f"'{basename}' already exists here. Overwrite it?")
+        root.destroy()
+        if not overwrite:
+            return
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        else:
+            os.remove(dst)
+
+    # 2. Slice operations to avoid freezing
+    if os.path.isdir(src):
+        os.makedirs(dst, exist_ok=True)
+        for root_item, dirs, files in os.walk(src):
+            for file in files:
+                s_file = os.path.join(root_item, file)
+                rel = os.path.relpath(s_file, src)
+                d_file = os.path.join(dst, rel)
+                os.makedirs(os.path.dirname(d_file), exist_ok=True)
+                shutil.copy2(s_file, d_file)
+                yield # Yield after each file copy to process window events
+            yield
+        shutil.rmtree(src)
+    else:
+        shutil.copy2(src, dst)
+        yield
+        os.remove(src)
+
 def update(events):
     global current_path, selected_item, file_rects, last_clicked_item, last_click_time
+    global moving_source_path, move_worker_generator
     init_fonts()
     
-    # If the app booted into save intercept mode, run dialog prompt instantly!
+    # Run the background generator frames to safely move items without freezing
+    if move_worker_generator is not None:
+        try:
+            next(move_worker_generator)
+        except StopIteration:
+            move_worker_generator = None
+            selected_item = None
+        return # Block interaction frames while transfers process
+
     if is_save_as_intercept:
         process_save_as_handover()
         return
@@ -109,6 +166,7 @@ def update(events):
     new_folder_rect = pygame.Rect(230, 310, 130, 35)
     new_file_rect   = pygame.Rect(375, 310, 110, 35)
     delete_rect     = pygame.Rect(500, 310, 90, 35)
+    move_btn_rect   = pygame.Rect(605, 310, 130, 35) # New button dynamic assignment
     back_btn_rect   = pygame.Rect(230, 165, 80, 35)
     
     for event in events:
@@ -152,6 +210,17 @@ def update(events):
                         os.remove(target)
                     selected_item = None
                 continue
+
+            # ── PROCESSING MOVING OPERATIONS CLICK TRIGGERS ──
+            if move_btn_rect.collidepoint(mouse_pos):
+                if moving_source_path is None:
+                    if selected_item:
+                        moving_source_path = os.path.join(current_path, selected_item)
+                else:
+                    # Execute move into current open catalog view frame
+                    move_worker_generator = create_move_worker(moving_source_path, current_path)
+                    moving_source_path = None
+                continue
                 
             clicked_something = False
             for item, rect in file_rects.items():
@@ -189,6 +258,7 @@ def render(screen):
     PANEL_BORDER = (200, 210, 230)
     BTN_COLOR = (70, 130, 180)
     BTN_HOVER = (100, 160, 210)
+    BTN_ACTIVE_GREEN = (46, 184, 114)
     TEXT_DARK = (40, 45, 55)
     
     work_area = pygame.Rect(210, 80, 1500, 900)
@@ -213,13 +283,27 @@ def render(screen):
     new_folder_rect = pygame.Rect(230, 310, 130, 35)
     new_file_rect   = pygame.Rect(375, 310, 110, 35)
     delete_rect     = pygame.Rect(500, 310, 90, 35)
+    move_btn_rect   = pygame.Rect(605, 310, 130, 35)
     
+    # Standard Actions Row
     for r, t in [(new_folder_rect, "+ Folder"), (new_file_rect, "+ Text File"), (delete_rect, "🗑 Delete")]:
         c = BTN_HOVER if r.collidepoint(mouse_pos) else BTN_COLOR
         if t == "🗑 Delete" and not selected_item:
             c = (210, 215, 225)
         pygame.draw.rect(screen, c, r)
         screen.blit(ui_font.render(t, True, WHITE), (r.x + 12, r.y + 6))
+
+    # ── RENDER SYSTEM DYNAMIC MOVE ACTION BUTTONS ──
+    if moving_source_path is None:
+        c = BTN_HOVER if move_btn_rect.collidepoint(mouse_pos) else BTN_COLOR
+        if not selected_item:
+            c = (210, 215, 225)
+        pygame.draw.rect(screen, c, move_btn_rect)
+        screen.blit(ui_font.render("📦 Move File", True, WHITE), (move_btn_rect.x + 14, move_btn_rect.y + 6))
+    else:
+        c = BTN_HOVER if move_btn_rect.collidepoint(mouse_pos) else BTN_ACTIVE_GREEN
+        pygame.draw.rect(screen, c, move_btn_rect)
+        screen.blit(ui_font.render("📥 Move Here", True, WHITE), (move_btn_rect.x + 12, move_btn_rect.y + 6))
 
     sidebar = pygame.Rect(230, 375, 240, 560)
     pygame.draw.rect(screen, WHITE, sidebar)
@@ -236,6 +320,12 @@ def render(screen):
     screen.blit(hint_lbl2, (245, 465))
     screen.blit(hint_lbl3, (245, 500))
     screen.blit(hint_lbl4, (245, 525))
+    
+    if moving_source_path:
+        src_lbl = file_font.render("Holding File:", True, BTN_ACTIVE_GREEN)
+        name_lbl = file_font.render(os.path.basename(moving_source_path), True, TEXT_DARK)
+        screen.blit(src_lbl, (245, 580))
+        screen.blit(name_lbl, (245, 605))
 
     list_area = pygame.Rect(490, 375, 1180, 560)
     pygame.draw.rect(screen, WHITE, list_area)
@@ -289,3 +379,13 @@ def render(screen):
                 
             txt_surface = file_font.render(display_text, True, TEXT_DARK)
             screen.blit(txt_surface, (item_x + 10, item_y + 10))
+
+    # ── VISUAL PROGRESS LOADING OVERLAY (PREVENTS FREEZING WINDOW) ──
+    if move_worker_generator is not None:
+        overlay_rect = pygame.Rect(490, 375, 1180, 560)
+        pygame.draw.rect(screen, (240, 240, 240, 200), overlay_rect)
+        pygame.draw.rect(screen, PANEL_BORDER, overlay_rect, 2)
+        
+        load_msg = ui_font.render("Moving file/s... Please wait.", True, BTN_COLOR)
+        screen.blit(load_msg, (overlay_rect.x + (overlay_rect.width // 2 - load_msg.get_width() // 2),
+                               overlay_rect.y + (overlay_rect.height // 2 - load_msg.get_height() // 2)))

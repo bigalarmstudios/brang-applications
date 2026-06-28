@@ -1,4 +1,4 @@
-__version__ = "1.3"
+__version__ = "1.4"
 import pygame
 import os
 
@@ -20,7 +20,6 @@ file_to_edit = None
 save_status_msg = ""
 status_timer = 0
 
-# Adjusted Save Box button coordinates to match upper-right screen boundaries
 SAVE_RECT_BOUNDS = pygame.Rect(1500, 92, 100, 35)
 
 def load_file(file_path):
@@ -42,16 +41,31 @@ def load_file(file_path):
 
 def save_file():
     global save_status_msg, status_timer
-    if file_to_edit:
+    
+    # Trigger the Save As redirect if there is no path yet
+    if not file_to_edit or file_to_edit == "Untitled.txt":
         try:
-            content = "\n".join(text_lines)
-            with open(file_to_edit, "w", encoding="utf-8") as f:
-                f.write(content)
-            save_status_msg = "Saved successfully!"
+            # Cache our working buffers safely on disk
+            cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+            buffer_path = os.path.join(cache_dir, "editor_buffer_cache.txt")
+            os.makedirs(cache_dir, exist_ok=True)
+            with open(buffer_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(text_lines))
+                
+            # Broadcast the event out to the core OS handler loop
+            pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_explorer"}))
         except Exception as e:
-            save_status_msg = f"Save failed: {e}"
-    else:
-        save_status_msg = "No file target assigned."
+            save_status_msg = f"Buffer failed: {e}"
+            status_timer = pygame.time.get_ticks()
+        return
+
+    try:
+        content = "\n".join(text_lines)
+        with open(file_to_edit, "w", encoding="utf-8") as f:
+            f.write(content)
+        save_status_msg = "Saved successfully!"
+    except Exception as e:
+        save_status_msg = f"Save failed: {e}"
     status_timer = pygame.time.get_ticks()
 
 def update(events):
@@ -130,7 +144,7 @@ def render(screen):
     pygame.draw.rect(screen, btn_c, SAVE_RECT_BOUNDS)
     pygame.draw.rect(screen, (100, 100, 105), SAVE_RECT_BOUNDS, 1)
     
-    save_lbl = ui_font.render("Save File", True, TEXT_COLOR)
+    save_lbl = ui_font.render("Save As...", True, TEXT_COLOR) if (not file_to_edit or file_to_edit == "Untitled.txt") else ui_font.render("Save File", True, TEXT_COLOR)
     screen.blit(save_lbl, (SAVE_RECT_BOUNDS.x + 12, SAVE_RECT_BOUNDS.y + 6))
     
     global save_status_msg
