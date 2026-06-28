@@ -1,4 +1,4 @@
-__version__ = "2.4"
+__version__ = "2.5"
 import pygame
 import os
 import shutil
@@ -29,9 +29,8 @@ last_clicked_item = None
 last_click_time = 0
 is_save_as_intercept = False
 
-# ── NEW STATE TRACKERS FOR FILE MOVING SYSTEM ──
-moving_source_path = None     # Absolute path of the item being moved
-move_worker_generator = None  # Tracks our active progressive generator job
+moving_source_path = None     
+move_worker_generator = None  
 
 def get_relative_path():
     rel = os.path.relpath(current_path, FILES_ROOT)
@@ -94,16 +93,13 @@ def check_text_editor_launch(full_file_path):
         return True
     return False
 
-# ── NEW: NON-FREEZING ASYNCHRONOUS MOVE WORKER GENERATOR ──
 def create_move_worker(src, dst_dir):
-    """Yields control back periodically during operation to keep UI drawing."""
     if not os.path.exists(src):
         return
     
     basename = os.path.basename(src)
     dst = os.path.join(dst_dir, basename)
     
-    # 1. Failsafe checks
     if src == dst_dir or dst_dir.startswith(src + os.sep):
         root = tk.Tk()
         root.withdraw()
@@ -125,7 +121,6 @@ def create_move_worker(src, dst_dir):
         else:
             os.remove(dst)
 
-    # 2. Slice operations to avoid freezing
     if os.path.isdir(src):
         os.makedirs(dst, exist_ok=True)
         for root_item, dirs, files in os.walk(src):
@@ -135,7 +130,7 @@ def create_move_worker(src, dst_dir):
                 d_file = os.path.join(dst, rel)
                 os.makedirs(os.path.dirname(d_file), exist_ok=True)
                 shutil.copy2(s_file, d_file)
-                yield # Yield after each file copy to process window events
+                yield 
             yield
         shutil.rmtree(src)
     else:
@@ -143,19 +138,33 @@ def create_move_worker(src, dst_dir):
         yield
         os.remove(src)
 
+def draw_vector_icon(screen, x, y, is_dir):
+    """Draws crisp vector icons instead of relying on broken system emoji rendering."""
+    if is_dir:
+        # Folder Icon (Manila Yellow Tint)
+        pygame.draw.rect(screen, (240, 200, 90), (x, y + 4, 22, 14), border_radius=2)
+        pygame.draw.rect(screen, (210, 170, 60), (x, y + 1, 10, 5), border_top_left_radius=2, border_top_right_radius=2)
+    else:
+        # File Document Icon (Clean Sheet White/Grey Edge)
+        pygame.draw.rect(screen, (230, 235, 240), (x + 3, y, 16, 20), border_radius=1)
+        pygame.draw.rect(screen, (170, 180, 190), (x + 3, y, 16, 20), 1, border_radius=1)
+        # Accent lines on the page document
+        pygame.draw.line(screen, (170, 180, 190), (x + 7, y + 6), (x + 15, y + 6), 1)
+        pygame.draw.line(screen, (170, 180, 190), (x + 7, y + 10), (x + 15, y + 10), 1)
+        pygame.draw.line(screen, (170, 180, 190), (x + 7, y + 14), (x + 12, y + 14), 1)
+
 def update(events):
     global current_path, selected_item, file_rects, last_clicked_item, last_click_time
     global moving_source_path, move_worker_generator
     init_fonts()
     
-    # Run the background generator frames to safely move items without freezing
     if move_worker_generator is not None:
         try:
             next(move_worker_generator)
         except StopIteration:
             move_worker_generator = None
             selected_item = None
-        return # Block interaction frames while transfers process
+        return 
 
     if is_save_as_intercept:
         process_save_as_handover()
@@ -166,7 +175,7 @@ def update(events):
     new_folder_rect = pygame.Rect(230, 310, 130, 35)
     new_file_rect   = pygame.Rect(375, 310, 110, 35)
     delete_rect     = pygame.Rect(500, 310, 90, 35)
-    move_btn_rect   = pygame.Rect(605, 310, 130, 35) # New button dynamic assignment
+    move_btn_rect   = pygame.Rect(605, 310, 130, 35) 
     back_btn_rect   = pygame.Rect(230, 165, 80, 35)
     
     for event in events:
@@ -211,13 +220,11 @@ def update(events):
                     selected_item = None
                 continue
 
-            # ── PROCESSING MOVING OPERATIONS CLICK TRIGGERS ──
             if move_btn_rect.collidepoint(mouse_pos):
                 if moving_source_path is None:
                     if selected_item:
                         moving_source_path = os.path.join(current_path, selected_item)
                 else:
-                    # Execute move into current open catalog view frame
                     move_worker_generator = create_move_worker(moving_source_path, current_path)
                     moving_source_path = None
                 continue
@@ -270,7 +277,7 @@ def render(screen):
     pygame.draw.rect(screen, PANEL_BORDER, header_rect, 2)
     
     path_str = get_relative_path()
-    path_lbl = ui_font.render(f"📁 Location: {path_str}", True, TEXT_DARK)
+    path_lbl = ui_font.render(f"Location: {path_str}", True, TEXT_DARK)
     screen.blit(path_lbl, (240, 100))
     
     mouse_pos = pygame.mouse.get_pos()
@@ -285,25 +292,23 @@ def render(screen):
     delete_rect     = pygame.Rect(500, 310, 90, 35)
     move_btn_rect   = pygame.Rect(605, 310, 130, 35)
     
-    # Standard Actions Row
-    for r, t in [(new_folder_rect, "+ Folder"), (new_file_rect, "+ Text File"), (delete_rect, "🗑 Delete")]:
+    for r, t in [(new_folder_rect, "+ Folder"), (new_file_rect, "+ Text File"), (delete_rect, "Delete")]:
         c = BTN_HOVER if r.collidepoint(mouse_pos) else BTN_COLOR
-        if t == "🗑 Delete" and not selected_item:
+        if t == "Delete" and not selected_item:
             c = (210, 215, 225)
         pygame.draw.rect(screen, c, r)
         screen.blit(ui_font.render(t, True, WHITE), (r.x + 12, r.y + 6))
 
-    # ── RENDER SYSTEM DYNAMIC MOVE ACTION BUTTONS ──
     if moving_source_path is None:
         c = BTN_HOVER if move_btn_rect.collidepoint(mouse_pos) else BTN_COLOR
         if not selected_item:
             c = (210, 215, 225)
         pygame.draw.rect(screen, c, move_btn_rect)
-        screen.blit(ui_font.render("📦 Move File", True, WHITE), (move_btn_rect.x + 14, move_btn_rect.y + 6))
+        screen.blit(ui_font.render("Move File", True, WHITE), (move_btn_rect.x + 14, move_btn_rect.y + 6))
     else:
         c = BTN_HOVER if move_btn_rect.collidepoint(mouse_pos) else BTN_ACTIVE_GREEN
         pygame.draw.rect(screen, c, move_btn_rect)
-        screen.blit(ui_font.render("📥 Move Here", True, WHITE), (move_btn_rect.x + 12, move_btn_rect.y + 6))
+        screen.blit(ui_font.render("Move Here", True, WHITE), (move_btn_rect.x + 12, move_btn_rect.y + 6))
 
     sidebar = pygame.Rect(230, 375, 240, 560)
     pygame.draw.rect(screen, WHITE, sidebar)
@@ -371,16 +376,17 @@ def render(screen):
             else:
                 pygame.draw.rect(screen, (248, 250, 254), item_rect)
                 pygame.draw.rect(screen, PANEL_BORDER, item_rect, 1)
-                
-            prefix = "📁 " if is_dir else "📄 "
-            display_text = prefix + item
-            if len(display_text) > 24:
-                display_text = display_text[:21] + "..."
+            
+            # ── NEW: Draw the vector shape icons instead of raw text strings ──
+            draw_vector_icon(screen, item_x + 10, item_y + 10, is_dir)
+            
+            display_text = item
+            if len(display_text) > 22:
+                display_text = display_text[:19] + "..."
                 
             txt_surface = file_font.render(display_text, True, TEXT_DARK)
-            screen.blit(txt_surface, (item_x + 10, item_y + 10))
+            screen.blit(txt_surface, (item_x + 40, item_y + 10))
 
-    # ── VISUAL PROGRESS LOADING OVERLAY (PREVENTS FREEZING WINDOW) ──
     if move_worker_generator is not None:
         overlay_rect = pygame.Rect(490, 375, 1180, 560)
         pygame.draw.rect(screen, (240, 240, 240, 200), overlay_rect)
