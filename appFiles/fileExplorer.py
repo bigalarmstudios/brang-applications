@@ -1,4 +1,4 @@
-__version__ = "2.5"
+__version__ = "2.9"
 import pygame
 import os
 import shutil
@@ -91,6 +91,35 @@ def check_text_editor_launch(full_file_path):
         with open(handover_path, "w", encoding="utf-8") as f:
             f.write(f"textEditor|{full_file_path}")
         return True
+    return False
+
+def check_paint_or_viewer_launch(full_file_path):
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    
+    # Prompt 1: Open with Paint
+    ans_paint = messagebox.askyesno("Open File", f"Would you like to open {os.path.basename(full_file_path)} inside Paint to edit?")
+    if ans_paint:
+        root.destroy()
+        handover_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache", "app_handover.txt")
+        os.makedirs(os.path.dirname(handover_path), exist_ok=True)
+        with open(handover_path, "w", encoding="utf-8") as f:
+            f.write(f"paint|{full_file_path}")
+        pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_paint"}))
+        return True
+        
+    # Prompt 2: Open with ImageViewer
+    ans_viewer = messagebox.askyesno("Open File", f"Would you like to open {os.path.basename(full_file_path)} inside ImageViewer instead?")
+    root.destroy()
+    if ans_viewer:
+        handover_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache", "app_handover.txt")
+        os.makedirs(os.path.dirname(handover_path), exist_ok=True)
+        with open(handover_path, "w", encoding="utf-8") as f:
+            f.write(f"imageViewer|{full_file_path}")
+        pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_imageViewer"}))
+        return True
+
     return False
 
 def create_move_worker(src, dst_dir):
@@ -195,14 +224,28 @@ def update(events):
                 continue
                 
             if new_file_rect.collidepoint(mouse_pos):
-                name = prompt_user_input("New File", "Enter file name (e.g. note.txt):")
+                name = prompt_user_input("New File", "Enter file name (e.g. canvas.png):")
                 if name:
-                    if not name.endswith(".txt"):
-                        name += ".txt"
-                    target = os.path.join(current_path, name.strip())
+                    name = name.strip()
+                    if not (name.endswith(".png") or name.endswith(".jpg")):
+                        name += ".png"
+                    
+                    target = os.path.join(current_path, name)
                     if not os.path.exists(target):
-                        with open(target, "w") as f:
-                            f.write("")
+                        try:
+                            # Generate a clean canvas file for paint to start with
+                            surf = pygame.Surface((1460, 785))
+                            surf.fill((255, 255, 255))
+                            pygame.image.save(surf, target)
+                        except Exception as e:
+                            print(f"Error creating file: {e}")
+                        
+                    # Handover to Paint immediately upon creation
+                    handover_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache", "app_handover.txt")
+                    os.makedirs(os.path.dirname(handover_path), exist_ok=True)
+                    with open(handover_path, "w", encoding="utf-8") as f:
+                        f.write(f"paint|{target}")
+                    pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_paint"}))
                 continue
                 
             if delete_rect.collidepoint(mouse_pos) and selected_item:
@@ -243,6 +286,8 @@ def update(events):
                         elif item.endswith(".txt"):
                             if check_text_editor_launch(full_path):
                                 pygame.event.post(pygame.event.Event(pygame.USEREVENT, {"action": "exit_to_editor"}))
+                        elif item.endswith(".png"):
+                            check_paint_or_viewer_launch(full_path)
                         last_clicked_item = None
                         break
                     else:
@@ -255,7 +300,7 @@ def update(events):
                 if list_area.collidepoint(mouse_pos):
                     selected_item = None
 
-        if event.type == pygame.USEREVENT and getattr(event, "action", "") in ["exit_to_editor", "exit_to_explorer"]:
+        if event.type == pygame.USEREVENT and getattr(event, "action", "") in ["exit_to_editor", "exit_to_explorer", "exit_to_paint", "exit_to_imageViewer"]:
             events.append(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE))
 
 def render(screen):
@@ -292,7 +337,7 @@ def render(screen):
     delete_rect     = pygame.Rect(500, 310, 90, 35)
     move_btn_rect   = pygame.Rect(605, 310, 130, 35)
     
-    for r, t in [(new_folder_rect, "+ Folder"), (new_file_rect, "+ Text File"), (delete_rect, "Delete")]:
+    for r, t in [(new_folder_rect, "+ Folder"), (new_file_rect, "+ Image File"), (delete_rect, "Delete")]:
         c = BTN_HOVER if r.collidepoint(mouse_pos) else BTN_COLOR
         if t == "Delete" and not selected_item:
             c = (210, 215, 225)
@@ -319,8 +364,8 @@ def render(screen):
     
     hint_lbl1 = file_font.render("Double-click directories", True, TEXT_DARK)
     hint_lbl2 = file_font.render("to enter them.", True, TEXT_DARK)
-    hint_lbl3 = file_font.render("Double-click .txt files", True, TEXT_DARK)
-    hint_lbl4 = file_font.render("to edit them.", True, TEXT_DARK)
+    hint_lbl3 = file_font.render("Double-click .png files", True, TEXT_DARK)
+    hint_lbl4 = file_font.render("to edit or view them.", True, TEXT_DARK)
     screen.blit(hint_lbl1, (245, 440))
     screen.blit(hint_lbl2, (245, 465))
     screen.blit(hint_lbl3, (245, 500))
@@ -377,7 +422,6 @@ def render(screen):
                 pygame.draw.rect(screen, (248, 250, 254), item_rect)
                 pygame.draw.rect(screen, PANEL_BORDER, item_rect, 1)
             
-            # ── NEW: Draw the vector shape icons instead of raw text strings ──
             draw_vector_icon(screen, item_x + 10, item_y + 10, is_dir)
             
             display_text = item
