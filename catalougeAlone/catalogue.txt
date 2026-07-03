@@ -1,7 +1,7 @@
 calculator,1.2
 textEditor,1.4
-imageViewer,1.0
-paint,1.0
+imageViewer,3.0
+paint,1.3
 musicPlayer,1.0
 clock,1.5
-fileExplorer,2.5
+fileExplorer,2.9
