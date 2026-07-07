@@ -434,3 +434,28 @@ def render(screen):
         load_msg = ui_font.render("Moving file/s... Please wait.", True, BTN_COLOR)
         screen.blit(load_msg, (overlay_rect.x + (overlay_rect.width // 2 - load_msg.get_width() // 2),
                                overlay_rect.y + (overlay_rect.height // 2 - load_msg.get_height() // 2)))
+# --- ADD THIS TO THE VERY BOTTOM OF fileExplorer.py ---
+if __name__ == "__main__":
+    # This only runs if the file is launched directly via subprocess
+    pygame.init()
+    screen = pygame.display.set_mode((1920, 1080))
+    pygame.display.set_caption("File Explorer")
+    clock = pygame.time.Clock()
+    
+    running = True
+    while running:
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.QUIT:
+                running = False
+                
+        screen.fill((255, 255, 255)) # Clear screen with white
+        
+        # Call the existing functions already in your file
+        update(events)
+        render(screen)
+        
+        pygame.display.flip()
+        clock.tick(60)
+        
+    pygame.quit()
