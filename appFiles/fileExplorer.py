@@ -1,4 +1,5 @@
-__version__ = "2.9"
+__version__ = "2.10"
+screen = pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
 import pygame
 import os
 import shutil
