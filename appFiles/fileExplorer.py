@@ -1,6 +1,6 @@
 __version__ = "2.10"
-screen = pygame.display.set_mode((1920, 1080), pygame.NOFRAME)
 import pygame
+# REMOVED: screen = pygame.display.set_mode(...) <- This was breaking the main desktop window
 import os
 import shutil
 import tkinter as tk
@@ -169,16 +169,12 @@ def create_move_worker(src, dst_dir):
         os.remove(src)
 
 def draw_vector_icon(screen, x, y, is_dir):
-    """Draws crisp vector icons instead of relying on broken system emoji rendering."""
     if is_dir:
-        # Folder Icon (Manila Yellow Tint)
         pygame.draw.rect(screen, (240, 200, 90), (x, y + 4, 22, 14), border_radius=2)
         pygame.draw.rect(screen, (210, 170, 60), (x, y + 1, 10, 5), border_top_left_radius=2, border_top_right_radius=2)
     else:
-        # File Document Icon (Clean Sheet White/Grey Edge)
         pygame.draw.rect(screen, (230, 235, 240), (x + 3, y, 16, 20), border_radius=1)
         pygame.draw.rect(screen, (170, 180, 190), (x + 3, y, 16, 20), 1, border_radius=1)
-        # Accent lines on the page document
         pygame.draw.line(screen, (170, 180, 190), (x + 7, y + 6), (x + 15, y + 6), 1)
         pygame.draw.line(screen, (170, 180, 190), (x + 7, y + 10), (x + 15, y + 10), 1)
         pygame.draw.line(screen, (170, 180, 190), (x + 7, y + 14), (x + 12, y + 14), 1)
@@ -234,14 +230,12 @@ def update(events):
                     target = os.path.join(current_path, name)
                     if not os.path.exists(target):
                         try:
-                            # Generate a clean canvas file for paint to start with
                             surf = pygame.Surface((1460, 785))
                             surf.fill((255, 255, 255))
                             pygame.image.save(surf, target)
                         except Exception as e:
                             print(f"Error creating file: {e}")
                         
-                    # Handover to Paint immediately upon creation
                     handover_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache", "app_handover.txt")
                     os.makedirs(os.path.dirname(handover_path), exist_ok=True)
                     with open(handover_path, "w", encoding="utf-8") as f:
