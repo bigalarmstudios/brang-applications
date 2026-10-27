@@ -36,13 +36,9 @@ Then copy the app into brang_os/programs/installedApps and start Brang OS.
 Keep the catalogue filename spelling as "catalougeAlone" for compatibility
 with existing Brang OS releases.
 
-YOUTUBE SEARCH APP
-------------------
-The YouTube app searches with the official YouTube Data API and displays up to
-ten text-only video results. A maintainer or user must create a YouTube Data API
-key, enable YouTube Data API v3 for it, and paste it into the app. The app saves
-that key only on the local computer under Brang OS's programs\cache folder.
-
-It does not download or cache videos. It optionally caches search-result text
-for six hours. Selecting a result opens a draggable Brang OS window and the
-explicit Open in YouTube button starts playback in YouTube's own browser player.
+SETTINGS APP
+------------
+The Settings app stores simple preferences only on the user's computer, under
+Brang OS's programs\cache folder. It currently controls the desktop theme,
+cursor-square size, and whether the Big Alarm Store may reuse its local
+catalogue cache. The user must restart Brang OS after saving to apply changes.
