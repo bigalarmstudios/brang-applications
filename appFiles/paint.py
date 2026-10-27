@@ -1,4 +1,4 @@
-__version__ = "1.3"
+__version__ = "1.4"
 import pygame
 import os
 import tkinter as tk
@@ -14,9 +14,9 @@ TOOLBAR_RECT = pygame.Rect(210, 80, 1500, 75)
 CANVAS_RECT = pygame.Rect(230, 175, 1460, 785)
 
 # Colors
-BG_COLOR = (240, 244, 250)      
-BAR_COLOR = (45, 45, 48)        
-TEXT_COLOR = (240, 240, 240)  
+BG_COLOR = (240, 244, 250)
+BAR_COLOR = (45, 45, 48)
+TEXT_COLOR = (240, 240, 240)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 PANEL_BORDER = (200, 210, 230)
@@ -27,10 +27,10 @@ PALETTE = [
 ]
 
 # App States
-current_tool = "brush"   
+current_tool = "brush"
 current_color = (0, 0, 0)
 slider_r, slider_g, slider_b = 0, 0, 0
-dragging_slider = None   
+dragging_slider = None
 brush_size = 5
 is_drawing = False
 last_mouse_pos = None
@@ -39,7 +39,16 @@ status_timer = 0
 current_file_path = None  # Tracks the currently opened file
 
 # Check dependency on launch
-BASE_DIR = os.getcwd()
+def get_os_root():
+    """Find Brang OS even when the app was opened from another folder."""
+    configured_root = os.environ.get("BRANG_OS_HOME")
+    if configured_root:
+        return configured_root
+    installed_app_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return installed_app_root if os.path.isdir(installed_app_root) else os.getcwd()
+
+
+BASE_DIR = get_os_root()
 EXPLORER_PATH = os.path.join(BASE_DIR, "programs", "installedApps", "fileExplorer.py")
 FILES_ROOT = os.path.join(BASE_DIR, "files")
 has_file_explorer = os.path.exists(EXPLORER_PATH)
@@ -70,13 +79,13 @@ def load_file(passed_argument):
     """Called by brangdesktop.py handover sequence when opening an image."""
     global current_file_path, canvas_surface, original_image_surface
     current_file_path = passed_argument
-    
+
     if os.path.exists(current_file_path):
         try:
             loaded_img = pygame.image.load(current_file_path)
             canvas_surface.fill(WHITE)
             canvas_surface.blit(loaded_img, (0, 0))
-            
+
             # Lock the base image layout into the background restoration canvas
             original_image_surface.fill(WHITE)
             original_image_surface.blit(loaded_img, (0, 0))
@@ -93,7 +102,7 @@ def prompt_filename():
 
 def save_canvas():
     global save_status_msg, status_timer, current_file_path
-    
+
     # Overwrite directly if file path is already known
     if current_file_path and os.path.exists(current_file_path):
         target_path = current_file_path
@@ -104,13 +113,13 @@ def save_canvas():
         name = name.strip()
         if not (name.endswith(".png") or name.endswith(".jpg")):
             name += ".png"
-            
+
         if not os.path.exists(FILES_ROOT):
             os.makedirs(FILES_ROOT)
-            
+
         target_path = os.path.join(FILES_ROOT, name)
         current_file_path = target_path
-        
+
     try:
         pygame.image.save(canvas_surface, target_path)
         save_status_msg = "Saved successfully!"
@@ -127,20 +136,20 @@ def erase_at(pos, radius):
     y1 = max(0, cy - radius)
     x2 = min(CANVAS_RECT.width, cx + radius)
     y2 = min(CANVAS_RECT.height, cy + radius)
-    
+
     w = x2 - x1
     h = y2 - y1
     if w <= 0 or h <= 0:
         return
-        
+
     patch = pygame.Surface((w, h))
     patch.blit(original_image_surface, (0, 0), (x1, y1, w, h))
-    
+
     mask = pygame.Surface((w, h))
     mask.fill((255, 0, 255))  # Magenta chroma-key background
     pygame.draw.circle(mask, (0, 0, 0), (cx - x1, cy - y1), radius)
     mask.set_colorkey((0, 0, 0))
-    
+
     patch.blit(mask, (0, 0))
     patch.set_colorkey((255, 0, 255))
     canvas_surface.blit(patch, (x1, y1))
@@ -152,7 +161,7 @@ def erase_line(p1, p2, radius):
     dx = x2 - x1
     dy = y2 - y1
     distance = max(1, int(((dx**2) + (dy**2))**0.5))
-    
+
     for i in range(0, distance + 1, max(1, radius // 2)):
         t = i / distance
         cx = int(x1 + dx * t)
@@ -164,38 +173,38 @@ def fast_flood_fill(surface, start_pos, fill_color):
     fill_rgb = fill_color[:3]
     if target_color == fill_rgb:
         return
-    
+
     width, height = surface.get_size()
     pixels = pygame.PixelArray(surface)
-    
+
     target_mapped = surface.map_rgb(target_color)
     fill_mapped = surface.map_rgb(fill_rgb)
-    
+
     stack = [start_pos]
     while stack:
         x, y = stack.pop()
         if pixels[x, y] == target_mapped:
             pixels[x, y] = fill_mapped
-            if x > 0 and pixels[x-1, y] == target_mapped: 
+            if x > 0 and pixels[x-1, y] == target_mapped:
                 stack.append((x - 1, y))
-            if x < width - 1 and pixels[x+1, y] == target_mapped: 
+            if x < width - 1 and pixels[x+1, y] == target_mapped:
                 stack.append((x + 1, y))
-            if y > 0 and pixels[x, y-1] == target_mapped: 
+            if y > 0 and pixels[x, y-1] == target_mapped:
                 stack.append((x, y - 1))
-            if y < height - 1 and pixels[x, y+1] == target_mapped: 
+            if y < height - 1 and pixels[x, y+1] == target_mapped:
                 stack.append((x, y + 1))
     del pixels
 
 def update(events):
     global current_color, brush_size, is_drawing, last_mouse_pos, current_tool
     global slider_r, slider_g, slider_b, dragging_slider
-    
+
     if not has_file_explorer:
         return
 
     mouse_pos = pygame.mouse.get_pos()
     mouse_pressed = pygame.mouse.get_pressed()
-    
+
     canvas_mouse_x = mouse_pos[0] - CANVAS_RECT.x
     canvas_mouse_y = mouse_pos[1] - CANVAS_RECT.y
     current_canvas_pos = (canvas_mouse_x, canvas_mouse_y)
@@ -210,7 +219,7 @@ def update(events):
         elif dragging_slider == "B":
             rel_x = max(0, min(100, mouse_pos[0] - SLIDER_B_RECT.x))
             slider_b = int((rel_x / 100) * 255)
-        
+
         current_color = (slider_r, slider_g, slider_b)
         if current_tool == "eraser":
             current_tool = "brush"
@@ -220,7 +229,7 @@ def update(events):
             if SAVE_BTN_RECT.collidepoint(mouse_pos):
                 save_canvas()
                 continue
-            
+
             if BTN_BRUSH_RECT.collidepoint(mouse_pos):
                 current_tool = "brush"
                 continue
@@ -285,7 +294,7 @@ def update(events):
 def render(screen):
     pygame.draw.rect(screen, BG_COLOR, WORK_AREA)
     pygame.draw.rect(screen, PANEL_BORDER, WORK_AREA, 3)
-    
+
     if not has_file_explorer:
         error_overlay = pygame.Rect(210, 80, 1500, 900)
         pygame.draw.rect(screen, (40, 45, 55), error_overlay)
@@ -296,7 +305,7 @@ def render(screen):
 
     pygame.draw.rect(screen, BAR_COLOR, TOOLBAR_RECT)
     mouse_pos = pygame.mouse.get_pos()
-    
+
     for btn, name, mode_id in [(BTN_BRUSH_RECT, "Brush", "brush"), (BTN_ERASER_RECT, "Eraser", "eraser"), (BTN_BUCKET_RECT, "Bucket", "bucket")]:
         if current_tool == mode_id:
             c = (0, 122, 204)
@@ -317,9 +326,9 @@ def render(screen):
     c_minus = (100, 100, 105) if SIZE_MINUS_RECT.collidepoint(mouse_pos) else (60, 60, 65)
     pygame.draw.rect(screen, c_minus, SIZE_MINUS_RECT, border_radius=2)
     screen.blit(ui_font.render("-", True, TEXT_COLOR), (SIZE_MINUS_RECT.x + 11, SIZE_MINUS_RECT.y + 6))
-    
+
     screen.blit(ui_font.render(f"Size: {brush_size}", True, TEXT_COLOR), (742, 108))
-    
+
     c_plus = (100, 100, 105) if SIZE_PLUS_RECT.collidepoint(mouse_pos) else (60, 60, 65)
     pygame.draw.rect(screen, c_plus, SIZE_PLUS_RECT, border_radius=2)
     screen.blit(ui_font.render("+", True, TEXT_COLOR), (SIZE_PLUS_RECT.x + 9, SIZE_PLUS_RECT.y + 6))
@@ -335,7 +344,7 @@ def render(screen):
 
     btn_save_c = (100, 100, 105) if SAVE_BTN_RECT.collidepoint(mouse_pos) else (60, 60, 65)
     pygame.draw.rect(screen, btn_save_c, SAVE_BTN_RECT, border_radius=3)
-    
+
     save_text = "Quick Save" if current_file_path else "Save Image"
     screen.blit(ui_font.render(save_text, True, TEXT_COLOR), (SAVE_BTN_RECT.x + 24, SAVE_BTN_RECT.y + 8))
 
@@ -348,3 +357,38 @@ def render(screen):
 
     screen.blit(canvas_surface, (CANVAS_RECT.x, CANVAS_RECT.y))
     pygame.draw.rect(screen, PANEL_BORDER, CANVAS_RECT, 2)
+# --- ADD THIS TO THE VERY BOTTOM OF paint.py ---
+if __name__ == "__main__":
+    # Initialize standalone window environment
+    pygame.init()
+    screen = pygame.display.set_mode((1920, 1080))
+    pygame.display.set_caption("Paint Application")
+    clock = pygame.time.Clock()
+
+    # Check if an image path was passed via command line arguments
+    import sys
+    if len(sys.argv) > 1:
+        load_file(sys.argv[1])
+
+    running = True
+    while running:
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # Close button coordinate check matching your desktop environment
+                if pygame.Rect(1800, 20, 40, 40).collidepoint(event.pos):
+                    running = False
+
+        # Paint background defaults to white canvas area
+        screen.fill((240, 244, 250))
+
+        # Drive the modular core functions
+        update(events)
+        render(screen)
+
+        pygame.display.flip()
+        clock.tick(60)
+
+    pygame.quit()

@@ -1,0 +1,2 @@
+# Every app is loaded by Brang OS in the same Pygame window.
+pygame>=2.5,<3

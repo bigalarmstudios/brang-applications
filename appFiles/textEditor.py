@@ -1,4 +1,4 @@
-__version__ = "1.4"
+__version__ = "1.5"
 import pygame
 import os
 
@@ -172,3 +172,39 @@ def render(screen):
             cx = text_start_x + cursor_offset_x
             if (pygame.time.get_ticks() // 500) % 2 == 0:
                 pygame.draw.rect(screen, CURSOR_COLOR, (cx, line_y + 2, 2, 22))
+# --- ADD THIS TO THE VERY BOTTOM OF textEditor.py ---
+if __name__ == "__main__":
+    # Initialize standalone window environment
+    pygame.init()
+    screen = pygame.display.set_mode((1920, 1080))
+    pygame.display.set_caption("Text Editor")
+    clock = pygame.time.Clock()
+    
+    # Check if a file path was passed via command line arguments (e.g. from file explorer)
+    import sys
+    if len(sys.argv) > 1:
+        load_file(sys.argv[1])
+        
+    running = True
+    while running:
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.QUIT:
+                running = False
+            # If the user clicks the close box in your app UI, handle it here
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # Close button coordinate check matching your desktop environment
+                if pygame.Rect(1800, 20, 40, 40).collidepoint(event.pos):
+                    running = False
+                    
+        # Match the background color expectations
+        screen.fill((30, 30, 30)) 
+        
+        # Drive the modular core functions
+        update(events)
+        render(screen)
+        
+        pygame.display.flip()
+        clock.tick(60)
+        
+    pygame.quit()
