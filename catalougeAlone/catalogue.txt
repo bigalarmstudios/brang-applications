@@ -5,4 +5,3 @@ paint,1.4
 musicPlayer,1.0
 clock,1.5
 fileExplorer,2.10
-YouTube,1.0
